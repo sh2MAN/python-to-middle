@@ -5,18 +5,6 @@ class Employee:
         super().__init__()
         self.salary = salary
 
-    @property
-    def is_analyze(self):
-        return False
-
-    @property
-    def is_develop(self):
-        return False
-
-    @property
-    def is_test(self):
-        return False
-
 
 class Organization:
     """Организация."""
@@ -24,17 +12,17 @@ class Organization:
     @property
     def can_analyze_count(self):
         """Количество сотрудников, которые могут анализировать задачи."""
-        return len([emp for emp in self._employee if emp.is_analyze])
+        return self._count_employees_by_type(Analyst)
 
     @property
     def can_develop_count(self):
         """Количество сотрудников, которые могут разрабатывать задачи."""
-        return len([emp for emp in self._employee if emp.is_develop])
+        return self._count_employees_by_type(Developer)
 
     @property
     def can_test_count(self):
         """Количество сотрудников, которые могут тестировать задачи."""
-        return len([emp for emp in self._employee if emp.is_test])
+        return self._count_employees_by_type(Tester)
 
     def __init__(self):
         self._employee = []
@@ -43,13 +31,22 @@ class Organization:
         """Принимает сотрудника на работу."""
         if not isinstance(employee, Employee):
             raise TypeError
-
         self._employee.append(employee)
+
         return self
 
     def accept_employees(self, *employees):
+        """Принимает сотрудников на работу."""
         for employee in employees:
             self.accept_employee(employee)
+
+    def _count_employees_by_type(self, employee_type) -> int:
+        """Подсчет сотрудников по типу выполняемой работы."""
+        count = 0
+        for employee in self._employee:
+            if isinstance(employee, employee_type):
+                count += 1
+        return count
 
     def calculate_salary(self):
         """Начисляет заработную плату сотрудникам.
@@ -68,29 +65,17 @@ class Analyst(Employee):
     def __init__(self, salary):
         super().__init__(salary)
 
-    @property
-    def is_analyze(self):
-        return True
-
 
 class Developer(Employee):
 
     def __init__(self, salary):
         super().__init__(salary)
 
-    @property
-    def is_develop(self):
-        return True
-
 
 class Tester(Employee):
 
     def __init__(self, salary):
         super().__init__(salary)
-
-    @property
-    def is_test(self):
-        return True
 
 
 class CEO(Analyst, Developer, Tester):
