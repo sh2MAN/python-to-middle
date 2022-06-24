@@ -61,39 +61,27 @@ class Organization:
 
 
 class Analyst(Employee):
-
-    def __init__(self, salary):
-        super().__init__(salary)
+    pass
 
 
 class Developer(Employee):
-
-    def __init__(self, salary):
-        super().__init__(salary)
+    pass
 
 
 class Tester(Employee):
-
-    def __init__(self, salary):
-        super().__init__(salary)
+    pass
 
 
 class CEO(Analyst, Developer, Tester):
-
-    def __init__(self, salary):
-        super().__init__(salary)
+    pass
 
 
 class TeamLead(Developer, Tester):
-
-    def __init__(self, salary):
-        super().__init__(salary)
+    pass
 
 
 class ProductOwner(Analyst, Tester):
-
-    def __init__(self, salary):
-        super().__init__(salary)
+    pass
 
 
 class Freelancer(Employee):
