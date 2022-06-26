@@ -1,7 +1,7 @@
 import json
+from dataclasses import dataclass
 from operator import attrgetter
 from typing import List, Callable, Any, Dict, Union
-from dataclasses import dataclass
 
 
 @dataclass
