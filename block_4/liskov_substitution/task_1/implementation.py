@@ -44,8 +44,8 @@ class NonWithdrawableAccount(Account):
 
         return self._balance
 
-    def withdraw(self, amount):
-        raise Exception('Со счета с данным типом нельзя снимать деньги')
+    def withdraw(self, _amount):
+        pass
 
 
 BaseAccountClass = Account
