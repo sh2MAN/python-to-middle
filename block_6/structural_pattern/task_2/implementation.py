@@ -64,8 +64,12 @@ class Driver:
 
     def start_use(self):
         """Начать использование автомобиля как средства передвижения"""
-        # нужно добавить свой код сюда, напишите правильную последовательность действий
+        self.car.open()
+        self.car.start_engine()
+        self.car.start_moving()
 
     def stop_use(self):
         """Прекратить использование автомобиля"""
-        # нужно добавить свой код сюда, напишите правильную последовательность действий
+        self.car.stop_moving()
+        self.car.stop_engine()
+        self.car.close()
