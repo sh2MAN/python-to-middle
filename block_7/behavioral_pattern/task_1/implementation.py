@@ -22,19 +22,51 @@ class ArithmeticOperation:
 
 class MinusOperation(ArithmeticOperation):
     """Операция вычитания"""
-    # нужно добавить свой код сюда
+
+    operation_symbol = '-'
+
+    def calculate(self, operation: str) -> int:
+        if self.operation_symbol in operation:
+            return (lambda a, b: a - b)(
+                *map(int, operation.split(self.operation_symbol)))
+        else:
+            return self._next_handler.calculate(operation)
 
 
 class PlusOperation(ArithmeticOperation):
     """Операция сложения"""
-    # нужно добавить свой код сюда
+
+    operation_symbol = '+'
+
+    def calculate(self, operation: str) -> int:
+        if self.operation_symbol in operation:
+            return (lambda a, b: a + b)(
+                *map(int, operation.split(self.operation_symbol)))
+        else:
+            return self._next_handler.calculate(operation)
 
 
 class DevideOperation(ArithmeticOperation):
     """Операция деления"""
-    # нужно добавить свой код сюда
+
+    operation_symbol = '/'
+
+    def calculate(self, operation: str) -> int:
+        if self.operation_symbol in operation:
+            return (lambda a, b: a / b)(
+                *map(int, operation.split(self.operation_symbol)))
+        else:
+            return self._next_handler.calculate(operation)
 
 
 class MultiplyOperation(ArithmeticOperation):
     """Опрация умножения"""
-    # нужно добавить свой код сюда
+
+    operation_symbol = '*'
+
+    def calculate(self, operation: str) -> int:
+        if self.operation_symbol in operation:
+            return (lambda a, b: a * b)(
+                *map(int, operation.split(self.operation_symbol)))
+        else:
+            return self._next_handler.calculate(operation)
