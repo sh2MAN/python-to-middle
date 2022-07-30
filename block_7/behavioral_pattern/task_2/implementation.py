@@ -1,14 +1,49 @@
-from abc import ABC, abstractmethod
-from enum import IntEnum
+from abc import abstractmethod, ABCMeta
+from enum import IntEnum, Enum
 
 
 class Language(IntEnum):
     RUSSIAN = 1
     ENGLISH = 2
     GERMAN = 3
+    FRANCE = 4
 
 
-class Mediator(metaclass=ABC):
+DictionaryTranslator = {
+    Language.RUSSIAN: {
+        'кот': {
+            Language.ENGLISH: 'cat',
+            Language.GERMAN: 'katze'
+        },
+        'собака': {
+            Language.ENGLISH: 'dog',
+            Language.GERMAN: 'hund'
+        }
+    },
+    Language.ENGLISH: {
+        'cat': {
+            Language.RUSSIAN: 'кот',
+            Language.GERMAN: 'katze'
+        },
+        'dog': {
+            Language.RUSSIAN: 'собака',
+            Language.GERMAN: 'hund'
+        }
+    },
+    Language.GERMAN: {
+        'katze': {
+            Language.RUSSIAN: 'кот',
+            Language.ENGLISH: 'cat'
+        },
+        'hund': {
+            Language.RUSSIAN: 'собака',
+            Language.ENGLISH: 'dog'
+        }
+    }
+}
+
+
+class Mediator(metaclass=ABCMeta):
     """ Абстрактный класс медиатора - переводчика """
 
     @abstractmethod
@@ -73,5 +108,14 @@ class Translator(Mediator):
         """
         self.foreigners[language] = foreigner
 
-    def translate(self, word: str, language_from: Language) -> str:
-        # нужно добавить свой код сюда
+    def translate(self, word: str, language_from: Language):
+        language_dictionary = DictionaryTranslator.get(language_from)
+
+        if not language_dictionary:
+            raise KeyError(f'Словарь {language_from.name} отсутствует')
+
+        for foreigner in self.foreigners.values():
+            if foreigner.language == language_from:
+                foreigner.last_listen_word = word
+            else:
+                foreigner.last_listen_word = language_dictionary.get(word).get(foreigner.language)
