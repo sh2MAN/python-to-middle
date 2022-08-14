@@ -1,6 +1,24 @@
+from django.contrib.postgres.indexes import (
+    GinIndex,
+)
 from django.db import (
     models,
 )
+
+
+class UpperGinIndex(GinIndex):
+
+    def create_sql(self, model, schema_editor, using='', **kwargs):
+        statement = super().create_sql(
+            model, schema_editor, using, **kwargs
+        )
+        quote_name = statement.parts['columns'].quote_name
+
+        def upper_quoted(column):
+            return 'UPPER({0})'.format(quote_name(column))
+
+        statement.parts['columns'].quote_name = upper_quoted
+        return statement
 
 
 class Employee(models.Model):
@@ -19,3 +37,14 @@ class Employee(models.Model):
 
     class Meta:
         db_table = 'indexes_employees'
+        indexes = [
+            models.Index(fields=['fname', 'iname', 'oname']),
+            models.Index(fields=['country']),
+            UpperGinIndex(
+                fields=['additional_info'],
+                name='additional_info_gin_index',
+                opclasses=['gin_trgm_ops']
+            ),
+            models.Index(fields=['begin']),
+            models.Index(fields=['end']),
+        ]
