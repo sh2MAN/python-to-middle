@@ -1,9 +1,11 @@
+from typing import Optional
+
 from django.db import (
     models, transaction,
 )
 
-from block_10.explain.task_1.consts import MAX_BOOK_IN_HALL
-from block_10.explain.task_1.errors import TakeBookException
+from block_10.explain.task_1.errors import TakeBookException, \
+    FreePositionException
 
 
 class BookInstanceStatus(models.TextChoices):
@@ -54,7 +56,7 @@ class TypePublication(models.Model):
 class BookCard(models.Model):
     """Книга."""
 
-    name = models.CharField('Название книги', max_length=100)
+    name = models.CharField('Название книги', max_length=255)
     author = models.ManyToManyField(
         Author,
         related_name='books',
@@ -72,6 +74,11 @@ class BookCard(models.Model):
     number_pages = models.SmallIntegerField('Количество страниц')
     date_publication = models.DateField('Дата публикации')
     description = models.TextField('Описание')
+    status = models.PositiveSmallIntegerField(
+        'Статус',
+        choices=BookInstanceStatus.choices,
+        default=BookInstanceStatus.AVAILABLE,
+    )
 
     class Meta:
         db_table = 'library_bookcard'
@@ -113,12 +120,24 @@ class ReaderTicket(models.Model):
     reader = models.ForeignKey(
         Reader,
         on_delete=models.CASCADE,
+        related_name='ticket',
         verbose_name='Читатель',
     )
     book = models.ForeignKey(
         BookCard,
         on_delete=models.CASCADE,
         verbose_name='Книга'
+    )
+    date_issue = models.DateField(
+        'Дата выдачи книги',
+    )
+    date_return = models.DateField(
+        'Дата возврата книги',
+        null=True,
+    )
+    is_out_time = models.BooleanField(
+        'Книга возвращена не во время',
+        default=False,
     )
 
     class Meta:
@@ -148,11 +167,6 @@ class LibraryHall(models.Model):
 
     def __str__(self):
         return self.name
-
-    @property
-    def is_free_space(self):
-        return self.books.filter(
-            status=BookInstanceStatus.AVAILABLE).count() < MAX_BOOK_IN_HALL
 
 
 class Shelf(models.Model):
@@ -231,11 +245,6 @@ class BookStorage(models.Model):
         null=True,
         verbose_name='Карточка',
     )
-    status = models.PositiveSmallIntegerField(
-        'Статус',
-        choices=BookInstanceStatus.choices,
-        default=BookInstanceStatus.AVAILABLE,
-    )
 
     class Meta:
         db_table = 'library_bookstorage'
@@ -243,29 +252,46 @@ class BookStorage(models.Model):
         verbose_name_plural = 'Книги в наличии'
 
     @classmethod
-    def get_first_free_rack(cls):
-        """Возвращает первую свободную полку."""
-        cls.objects.filter()
+    def get_first_free_position(cls):
+        """Получение первого свободного места для размещения книги."""
+        return cls.objects.filter(book__isnull=True).first()
+
+    @classmethod
+    def get_first_free_hall(cls) -> Optional[int]:
+        """Получение идентификатора помещения где есть свободная полка."""
+        return cls.objects.filter(book__isnull=True).first()
+
+    def get_librarian(self):
+        """Возвращает ответственного библиотекаря."""
+        return self.hall.librarian
+
+    @classmethod
+    def put_book(cls, card_book: BookCard):
+        with transaction.atomic():
+            free_position = cls.get_first_free_position()
+            if not free_position:
+                raise FreePositionException('Свободныйх мест для книг нет.')
+            position = cls.objects.select_for_update().get(pk=free_position.id)
+            position.book = card_book
+            position.save()
 
     def get_book(self):
         """Получить книгу."""
-        if self.status == BookInstanceStatus.MISSING:
+        if self.book is None:
             raise TakeBookException('Книгу уже забрали')
 
-        self.take_book(self.pk)
+        return self.take_book(self.pk)
 
     @classmethod
-    def take_book(cls, _id: int) -> 'BookStorage':
+    def take_book(cls, _id: int) -> 'BookCard':
         """Выдача книги."""
         with transaction.atomic():
-            take_book: BookStorage = cls.objects.select_for_update().get(
-                pk=_id)
-            take_book.status = BookInstanceStatus.MISSING
-            take_book.hall = None
-            take_book.shelf = None
-            take_book.rack = None
+            take_book: BookStorage = cls.objects.select_for_update().get(pk=_id)
+            book: BookCard = take_book.book
+
+            take_book.book = None
             take_book.save()
-            return take_book
+            return book
 
 
 class BookMovementLog(models.Model):
@@ -292,13 +318,6 @@ class BookMovementLog(models.Model):
         Rack,
         on_delete=models.RESTRICT,
         verbose_name='Полка',
-        null=True,
-    )
-    date_issue = models.DateField(
-        'Дата выдачи книги',
-    )
-    date_return = models.DateField(
-        'Дата возврата книги',
         null=True,
     )
     status = models.PositiveSmallIntegerField(

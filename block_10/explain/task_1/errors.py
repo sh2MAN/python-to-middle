@@ -1,3 +1,6 @@
 class TakeBookException(Exception):
     """Книгу уже забрали."""
-    pass
+
+
+class FreePositionException(Exception):
+    """Отсутствие свободного места."""

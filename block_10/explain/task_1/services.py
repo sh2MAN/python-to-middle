@@ -1,17 +1,17 @@
-import os
-import django
-
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "course.settings")
-django.setup()
-
-from itertools import product
-from typing import Union, List, Tuple
+import csv
+import datetime
+import re
 from abc import ABC, abstractmethod
-from typing import Any
-from block_10.explain.task_1.consts import NAMES
-from block_10.explain.task_1.models import BookCard, LibraryHall, Librarian, \
-    Shelf, Rack, BookStorage
+from itertools import product
 from random import choice, randint
+from typing import Union, List, Tuple, Dict
+
+
+
+from block_10.explain.task_1.consts import NAMES
+from block_10.explain.task_1.errors import FreePositionException
+from block_10.explain.task_1.models import BookCard, LibraryHall, Librarian, \
+    Shelf, Rack, BookStorage, Author, TypePublication
 
 
 def get_random_name(suffix: str = '', choices: Union[list, tuple] = NAMES) -> str:
@@ -54,7 +54,8 @@ class LibraryHallProduct(AbstractProduct):
         for _ in range(self.quantity):
             stor.append(
                 LibraryHall(
-                    name=get_random_name(choices=('зал', 'офис', 'склад', 'холл')),
+                    name=get_random_name(
+                        choices=('зал', 'офис', 'склад', 'холл')),
                     librarian=librarian,
                 )
             )
@@ -122,6 +123,7 @@ class LibraryStorageFactory(AbstractFactory):
 
 
 def create_hall(factory: AbstractFactory, librarian: Librarian):
+    """Создание нового помещения."""
     hall = factory.create_hall()
     hall_ids = hall.build(librarian)
     shelf = factory.create_shelf()
@@ -131,14 +133,111 @@ def create_hall(factory: AbstractFactory, librarian: Librarian):
 
     stor = []
     for hall_id, shelf_id, rack_id, position_id in product(hall_ids, shelf_ids, *rack_ids):
-        stor.append(BookStorage(
-            hall=hall_id, shelf=shelf_id, rack=rack_id, position=position_id
-        ))
+        stor.append(BookStorage(hall=hall_id, shelf=shelf_id, rack=rack_id, position=position_id))
     BookStorage.objects.bulk_create(stor)
 
 
-class LibraryManager:
-    """Менеджер библиотеки.
+class AbstractStorage(ABC):
+    """Абстрактное хранилище."""
+
+    @abstractmethod
+    def add(self, *args):
+        """Добавить в хранилище."""
+
+    @abstractmethod
+    def get(self, *args):
+        """Получить из хранилища."""
+
+
+class PreloaderBook:
+    col_mapper = {
+        'name': 'Название издания',
+        'author': 'Авторы',
+        'type_publication': 'Вид издания',
+        'isbn': 'ISBN',
+        'number_pages': 'Кол-во стр.',
+        'date_publication': 'Год издания',
+        'description': 'Аннотация',
+    }
+
+    def __init__(self):
+        self._books = []
+        self._is_normalize = False
+
+    def load_from_file(self, filename):
+        """Загрузка из файла."""
+        with open(filename, 'r') as read_obj:
+            csv_dict_reader = csv.DictReader(read_obj, delimiter='@', quotechar='#')
+            for row in csv_dict_reader:
+                self._books.append(
+                    {k: row[v] for k, v in self.col_mapper.items()}
+                )
+
+    def _normalize(self):
+        """Нормализация полученных данных."""
+        for book in self._books:
+            book['name'] = self._normalize_string(book['name'])
+            book['author'] = self._normalize_author(
+                self._normalize_string(book['author'])
+            )
+            book['type_publication'] = self._normalize_type_publication(
+                self._normalize_string(book['type_publication'])
+            )
+            book['date_publication'] = self._normalize_date_publication(
+                self._normalize_string(book['date_publication'])
+            )
+            book['description'] = self._normalize_string(book['description'])
+
+        self._is_normalize = True
+
+    def _normalize_string(self, string: str) -> str:
+        return string.replace('\n', ' ').replace('  ', ' ')
+
+    def _normalize_author(self, authors: str) -> List[str]:
+        """Обработка строки со списком авторов."""
+        pattern = r'(?P<author>\w+ \w\.\s?\w.)|(?P<author_a>\w\.\s?\w. \w+)'
+        matchs = re.findall(pattern, authors, re.UNICODE)
+
+        return [match[0] for match in matchs]
+
+    def _normalize_date_publication(self, date_publication: str) -> datetime.date:
+        """Приведение даты к формату даты"""
+        return datetime.datetime.strptime(date_publication, '%Y').date()
+
+    def _normalize_type_publication(self, type_publication: str) -> List[str]:
+        """Обработка строки с типами публикаций,."""
+        return type_publication.split(',')
+
+    def get_load_books(self):
+        """Возвращает список книг для дальнейшей обработки."""
+        self._normalize()
+        return self._books
+
+
+class LibraryStorage(AbstractStorage):
+    """Библиотечное хранилище."""
+
+    def __init__(self, manager: 'LibrarianManager'):
+        self._storage = []
+        self.manager = manager
+
+    def add(self, book: dict, *args):
+        """Добавление данных о книге."""
+        book_card = self.manager.add_bookcard(book)
+        self._storage.append(book_card)
+
+        self.manager.add_book(self.get())
+
+    def get(self, *args) -> BookCard:
+        """Получение карточки для последующего добавления книги."""
+        item = None
+        if self._storage:
+            item = self._storage.pop()
+        return item
+
+
+class LibraryDirector:
+    """Руководитель библиотеки.
 
     Отвечает за поиск новых библиотекарей и помещений.
     """
@@ -158,41 +257,86 @@ class LibraryManager:
 class LibrarianManager:
     """Заведующий библиотекой."""
 
+    director = LibraryDirector()
+
+    def __init__(self):
+        # Формат данных:
+        #  key - помещение за которое отвечает сотрудник
+        #  value - объект библиотекаря
+        self.halls: Dict[int, LibraryWorker] = {}
+
+        self._preload_halls()
+
     def add_bookcard(self, book: dict) -> BookCard:
         """Добавление карточки."""
         authors = book.pop('author', None)
         type_publications = book.pop('type_publication', None)
-        book_card = BookCard.objects.get_or_create(**book)
+        book_card, _ = BookCard.objects.get_or_create(**book)
 
         for author in authors:
-            book_card.author.get_or_create(short_name=author)
+            a, _ = Author.objects.get_or_create(short_name=author)
+            book_card.author.add(a)
 
         for type_publication in type_publications:
-            book_card.type_publication.get_or_create(name=type_publication)
+            tp, _ = TypePublication.objects.get_or_create(name=type_publication)
+            book_card.type_publication.add(tp)
 
         book_card.save()
 
         return book_card
 
+    def add_book(self, book_card: BookCard):
+        """Разместить книгу на полке."""
+        hall = BookStorage.get_first_free_hall()
+        if not hall:
+            self.director.add_hall()
+            self._preload_halls()
+            hall = BookStorage.get_first_free_hall()
 
-class LibraryWorker:
+        librarian = self.halls[hall.hall_id]
+        librarian.put_book(book_card)
 
-    def add_book(self, book_card):
-        """Добавление книги."""
+    def _preload_halls(self):
+        """Обновление данных о помещениях библиотеки и ответственных сотрудниках."""
+        self.halls = {
+            hall.id: LibraryWorker(hall.librarian.name) for hall in LibraryHall.objects.all()
+        }
 
 
-class LibraryStorage:
-    """Хранилище."""
+class BaseLibraryWorker(ABC):
+    """
+    Базовый класс сотрудника библиотеки.
 
-    def __init__(self, manager: LibrarianManager):
-        self._storage = []
-        self.manager = manager
+    Сотрудник занимается выдачей и получением книг.
+    """
 
-    def register_book(self, book:dict):
-        """Регистрация книги."""
-        book_card = self.manager.add_bookcard(book)
+    @abstractmethod
+    def get_book(self, *args):
+        """Выдать книгу."""
 
-#
-# if __name__ == '__main__':
-#     manager = LibraryManager()
-#     manager.add_hall()
+    @abstractmethod
+    def put_book(self, *args):
+        """Положить книгу на полку."""
+
+
+class LibraryWorker(BaseLibraryWorker):
+    """Сотрудник библиотеки."""
+
+    director = LibraryDirector()
+
+    def __init__(self, name):
+        self.name = name
+
+    def get_book(self, book_card: BookCard):
+        """Выдать книгу."""
+        book = BookStorage.objects.get(book=book_card)
+
+        return book.get_book()
+
+    def put_book(self, book_card: BookCard):
+        """Вернуть книгу."""
+        try:
+            BookStorage.put_book(book_card)
+        except FreePositionException:
+            self.director.add_hall()
+            BookStorage.put_book(book_card)
