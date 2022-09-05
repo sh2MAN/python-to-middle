@@ -98,7 +98,7 @@ class Librarian(models.Model):
 
     name = models.CharField(
         'Наименование',
-        max_length=50,
+        max_length=100,
     )
 
     class Meta:
@@ -146,6 +146,9 @@ class LibraryHall(models.Model):
         verbose_name = 'Библиотечный зал'
         verbose_name_plural = 'Библиотечные залы'
 
+    def __str__(self):
+        return self.name
+
     @property
     def is_free_space(self):
         return self.books.filter(
@@ -155,9 +158,9 @@ class LibraryHall(models.Model):
 class Shelf(models.Model):
     """Стеллаж."""
 
-    number = models.PositiveSmallIntegerField(
-        'Номер стеллажа',
-        unique=True
+    name = models.CharField(
+        'Наименование стеллажа',
+        max_length=25,
     )
     hall = models.ForeignKey(
         LibraryHall,
@@ -171,13 +174,16 @@ class Shelf(models.Model):
         verbose_name = 'Стеллаж'
         verbose_name_plural = 'Стеллажи'
 
+    def __str__(self):
+        return f'{self.hall}/{self.name}'
+
 
 class Rack(models.Model):
     """Полка в стеллаже."""
 
-    number = models.PositiveSmallIntegerField(
-        'Номер полки',
-        unique=True
+    name = models.CharField(
+        'Наименование полки',
+        max_length=25,
     )
     shelf = models.ForeignKey(
         Shelf,
@@ -191,13 +197,38 @@ class Rack(models.Model):
         verbose_name = 'Полка'
         verbose_name_plural = 'Полки'
 
+    def __str__(self):
+        return f'{self.shelf}/{self.number}'
 
-class BookInstance(models.Model):
-    """Книга в библиотеке."""
 
+class BookStorage(models.Model):
+    """Хранилище книг."""
+
+    hall = models.ForeignKey(
+        LibraryHall,
+        on_delete=models.PROTECT,
+        related_name='books',
+        verbose_name='Книжный зал',
+    )
+    shelf = models.ForeignKey(
+        Shelf,
+        on_delete=models.PROTECT,
+        related_name='books',
+        verbose_name='Номер стеллажа',
+    )
+    rack = models.ForeignKey(
+        Rack,
+        on_delete=models.PROTECT,
+        related_name='books',
+        verbose_name='Номер полки',
+    )
+    position = models.PositiveSmallIntegerField(
+        'Позиция книги на полке',
+    )
     book = models.ForeignKey(
         BookCard,
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
+        null=True,
         verbose_name='Карточка',
     )
     status = models.PositiveSmallIntegerField(
@@ -205,32 +236,16 @@ class BookInstance(models.Model):
         choices=BookInstanceStatus.choices,
         default=BookInstanceStatus.AVAILABLE,
     )
-    hall = models.ForeignKey(
-        LibraryHall,
-        on_delete=models.PROTECT,
-        related_name='books',
-        verbose_name='Книжный зал',
-        null=True,
-    )
-    shelf = models.ForeignKey(
-        Shelf,
-        on_delete=models.PROTECT,
-        related_name='books',
-        verbose_name='Номер стеллажа',
-        null=True,
-    )
-    rack = models.ForeignKey(
-        Rack,
-        on_delete=models.PROTECT,
-        related_name='books',
-        verbose_name='Номер полки',
-        null=True,
-    )
 
     class Meta:
-        db_table = 'library_bookinstance'
+        db_table = 'library_bookstorage'
         verbose_name = 'Книга в наличии'
         verbose_name_plural = 'Книги в наличии'
+
+    @classmethod
+    def get_first_free_rack(cls):
+        """Возвращает первую свободную полку."""
+        cls.objects.filter()
 
     def get_book(self):
         """Получить книгу."""
@@ -240,10 +255,10 @@ class BookInstance(models.Model):
         self.take_book(self.pk)
 
     @classmethod
-    def take_book(cls, _id: int) -> 'BookInstance':
+    def take_book(cls, _id: int) -> 'BookStorage':
         """Выдача книги."""
         with transaction.atomic():
-            take_book: BookInstance = cls.objects.select_for_update().get(
+            take_book: BookStorage = cls.objects.select_for_update().get(
                 pk=_id)
             take_book.status = BookInstanceStatus.MISSING
             take_book.hall = None
@@ -257,7 +272,7 @@ class BookMovementLog(models.Model):
     """Журнал перемещения книг."""
 
     book = models.ForeignKey(
-        BookInstance,
+        BookStorage,
         on_delete=models.CASCADE,
         verbose_name='Книга',
     )
