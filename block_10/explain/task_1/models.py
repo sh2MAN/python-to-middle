@@ -13,6 +13,14 @@ class BookInstanceStatus(models.TextChoices):
     MISSING = 2, 'Отсутствует'
 
 
+class BookMovementStatus(models.TextChoices):
+    """Статус книги в журнале."""
+
+    ISSUED = 1, 'Выдана'
+    RETURNED = 2, 'Возвращена'
+    MOVEMENT = 3, 'Перемещена'
+
+
 class Author(models.Model):
     """Автор."""
 
@@ -249,7 +257,7 @@ class BookMovementLog(models.Model):
     """Журнал перемещения книг."""
 
     book = models.ForeignKey(
-        BookCard,
+        BookInstance,
         on_delete=models.CASCADE,
         verbose_name='Книга',
     )
@@ -257,12 +265,30 @@ class BookMovementLog(models.Model):
         Reader,
         on_delete=models.CASCADE,
         verbose_name='Читатель',
+        null=True,
+    )
+    librarian = models.ForeignKey(
+        Librarian,
+        on_delete=models.CASCADE,
+        verbose_name='Библиотекарь',
+        null=True,
+    )
+    rack = models.ForeignKey(
+        Rack,
+        on_delete=models.RESTRICT,
+        verbose_name='Полка',
+        null=True,
     )
     date_issue = models.DateField(
         'Дата выдачи книги',
     )
     date_return = models.DateField(
         'Дата возврата книги',
+        null=True,
+    )
+    status = models.PositiveSmallIntegerField(
+        'Статус',
+        choices=BookMovementStatus.choices,
     )
 
     class Meta:
